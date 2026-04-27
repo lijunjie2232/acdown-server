@@ -14,8 +14,8 @@ export async function handleProxyRoutes(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // Check authentication
-  const authError = authMiddleware(request, env);
+  // Check authentication (now async)
+  const authError = await authMiddleware(request, env);
   if (authError) {
     return authError;
   }

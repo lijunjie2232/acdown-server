@@ -1,15 +1,52 @@
-// In-memory session store (in production, use KV or D1)
-const sessions = new Map();
+// In-memory session store removed - using stateless tokens instead
+// Tokens are self-contained with HMAC signature for verification
 
 /**
- * Generate a random session token
+ * Generate a stateless authentication token with HMAC signature
+ * Format: base64url(payload).base64url(signature)
+ * @param {Object} env - Environment variables
+ * @returns {string} Signed token
  */
-function generateSessionToken() {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return Array.from(array)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+function generateStatelessToken(env) {
+  // Get token expiry from environment (default: 7 days = 604800 seconds)
+  const tokenExpirySeconds = parseInt(env.TOKEN_EXPIRY) || 604800;
+  const expiresAt = Date.now() + (tokenExpirySeconds * 1000);
+  
+  // Create payload
+  const payload = {
+    exp: expiresAt,
+    iat: Date.now(),
+  };
+  
+  // Convert payload to base64url
+  const payloadStr = JSON.stringify(payload);
+  const payloadBase64 = btoa(payloadStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  
+  // Create HMAC signature using ENCRYPTION_KEY as signing key
+  return crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(env.ENCRYPTION_KEY),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  ).then(async (key) => {
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(payloadBase64)
+    );
+    
+    // Convert signature to base64url
+    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+    
+    return {
+      token: `${payloadBase64}.${signatureBase64}`,
+      expiresAt: expiresAt,
+    };
+  });
 }
 
 /**
@@ -69,11 +106,11 @@ async function generateTOTP(key, timeWindow) {
 }
 
 /**
- * Verify TOTP code and create session
+ * Verify TOTP code and generate stateless token
  * @param {string} code - TOTP code from authenticator
  * @param {string} totpSecret - TOTP secret from environment
  * @param {Object} env - Environment variables
- * @returns {Object|null} Session token or null if invalid
+ * @returns {Object|null} Token object or null if invalid
  */
 export async function verifyTOTP(code, totpSecret, env) {
   try {
@@ -100,20 +137,8 @@ export async function verifyTOTP(code, totpSecret, env) {
       return null;
     }
     
-    // Get token expiry from environment (default: 7 days = 604800 seconds)
-    const tokenExpirySeconds = parseInt(env.TOKEN_EXPIRY) || 604800;
-    const SESSION_TTL = tokenExpirySeconds * 1000; // Convert to milliseconds
-    
-    // Create session
-    const token = generateSessionToken();
-    const expiresAt = Date.now() + SESSION_TTL;
-    
-    sessions.set(token, { expiresAt });
-    
-    // Clean up expired sessions periodically
-    cleanupExpiredSessions();
-    
-    return { token, expiresAt };
+    // Generate stateless token
+    return await generateStatelessToken(env);
   } catch (error) {
     console.error('TOTP verification error:', error);
     return null;
@@ -121,45 +146,83 @@ export async function verifyTOTP(code, totpSecret, env) {
 }
 
 /**
- * Validate session token
+ * Validate stateless token by verifying HMAC signature and expiry
+ * @param {string} token - Stateless token
+ * @param {Object} env - Environment variables
+ * @returns {boolean} True if valid
+ */
+export async function validateStatelessToken(token, env) {
+  try {
+    if (!token) {
+      return false;
+    }
+    
+    // Split token into payload and signature
+    const parts = token.split('.');
+    if (parts.length !== 2) {
+      return false;
+    }
+    
+    const [payloadBase64, signatureBase64] = parts;
+    
+    // Verify HMAC signature
+    const signatureValid = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(env.ENCRYPTION_KEY),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    ).then(async (key) => {
+      // Convert base64url signature back to bytes
+      const signatureStr = signatureBase64.replace(/-/g, '+').replace(/_/g, '/');
+      const padding = '='.repeat((4 - signatureStr.length % 4) % 4);
+      const signatureBytes = Uint8Array.from(atob(signatureStr + padding), c => c.charCodeAt(0));
+      
+      return await crypto.subtle.verify(
+        'HMAC',
+        key,
+        signatureBytes,
+        new TextEncoder().encode(payloadBase64)
+      );
+    });
+    
+    if (!signatureValid) {
+      return false;
+    }
+    
+    // Decode payload
+    const payloadStr = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadStr);
+    
+    // Check expiration
+    if (Date.now() > payload.exp) {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Token validation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Validate session token (legacy support - always returns false)
  * @param {string} token - Session token
  * @returns {boolean} True if valid
  */
 export function validateSession(token) {
-  if (!token || !sessions.has(token)) {
-    return false;
-  }
-  
-  const session = sessions.get(token);
-  
-  // Check if session has expired
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(token);
-    return false;
-  }
-  
-  return true;
+  // Deprecated: use validateStatelessToken instead
+  return false;
 }
 
 /**
- * Clean up expired sessions
- */
-function cleanupExpiredSessions() {
-  const now = Date.now();
-  for (const [token, session] of sessions.entries()) {
-    if (now > session.expiresAt) {
-      sessions.delete(token);
-    }
-  }
-}
-
-/**
- * Authentication middleware for Workers
+ * Authentication middleware for Workers (stateless)
  * @param {Request} request - Fetch request
  * @param {Object} env - Environment variables
- * @returns {Response|null} Error response or null if authenticated
+ * @returns {Promise<Response|null>} Error response or null if authenticated
  */
-export function authMiddleware(request, env) {
+export async function authMiddleware(request, env) {
   const token = request.headers.get('x-auth-token');
   
   if (!token) {
@@ -178,7 +241,8 @@ export function authMiddleware(request, env) {
     );
   }
   
-  if (!validateSession(token)) {
+  const isValid = await validateStatelessToken(token, env);
+  if (!isValid) {
     return new Response(
       JSON.stringify({
         success: false,

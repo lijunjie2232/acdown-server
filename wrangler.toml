@@ -17,8 +17,6 @@ directory = "./public"
 CHUNK_SIZE = "67108864"
 MAX_FILE_SIZE = "-1"
 TOKEN_EXPIRY = "604800"
-TOTP_SECRET = ""
-ENCRYPTION_KEY = ""
 
 # Use wrangler secret put to set sensitive values:
 # wrangler secret put TOTP_SECRET
