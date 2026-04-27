@@ -1,5 +1,6 @@
 import { handleAuthRoutes } from './routes/auth';
 import { handleProxyRoutes } from './routes/proxy';
+import { handleConfigRoutes } from './routes/config';
 
 /**
  * Cloudflare Worker entry point
@@ -53,6 +54,12 @@ export default {
       // Auth routes
       if (path.startsWith('/api/auth/')) {
         const response = await handleAuthRoutes(request, env);
+        return addCorsHeaders(response, corsHeaders);
+      }
+
+      // Config routes
+      if (path.startsWith('/api/config')) {
+        const response = await handleConfigRoutes(request, env);
         return addCorsHeaders(response, corsHeaders);
       }
 
