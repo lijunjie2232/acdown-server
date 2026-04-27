@@ -5,11 +5,21 @@ info:
     A secure file proxy server built on Cloudflare Workers with TOTP authentication.
     
     This API provides endpoints for:
-    - TOTP-based authentication
+    - TOTP-based authentication with stateless tokens
+    - Server configuration retrieval
     - File analysis and metadata retrieval
     - Chunked file downloads with encrypted parameters
     
-    All proxy endpoints require authentication via `x-auth-token` header.
+    **Authentication:**
+    - Proxy endpoints require authentication via `x-auth-token` header
+    - Tokens are stateless JWT-like tokens with HMAC signature
+    - Tokens do not require server-side session storage
+    
+    **Key Features:**
+    - Stateless authentication (works across distributed workers)
+    - Configurable chunk sizes for optimized downloads
+    - Encrypted download parameters for security
+    - Range request support for large files
   version: 1.0.0
   contact:
     name: ACDown Server
@@ -27,8 +37,10 @@ servers:
 tags:
   - name: Authentication
     description: TOTP-based authentication endpoints
+  - name: Configuration
+    description: Server configuration endpoints (no authentication required)
   - name: Proxy
-    description: File proxy and download endpoints
+    description: File proxy and download endpoints (authentication required)
 
 paths:
   /api/auth/generate-secret:
@@ -69,8 +81,11 @@ paths:
         - Authentication
       summary: Login with TOTP Code
       description: |
-        Authenticates using a TOTP code and returns a session token.
-        The session token should be included in subsequent requests via the `x-auth-token` header.
+        Authenticates using a TOTP code and returns a stateless token.
+        The token is self-contained with HMAC signature and expiration.
+        Include the token in subsequent requests via the `x-auth-token` header.
+        
+        **Note:** Tokens are stateless and work across all worker instances without server-side session storage.
       operationId: loginWithTOTP
       requestBody:
         required: true
@@ -125,6 +140,46 @@ paths:
                 error:
                   code: LOGIN_FAILED
                   message: Login failed due to server error
+
+  /api/config:
+    get:
+      tags:
+        - Configuration
+      summary: Get Server Configuration
+      description: |
+        Retrieves server configuration settings including chunk size, max file size, and token expiry.
+        
+        This endpoint does **not** require authentication and is publicly accessible.
+        
+        Use this information to optimize your download strategy and understand server limitations.
+      operationId: getServerConfig
+      responses:
+        '200':
+          description: Successfully retrieved configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+              example:
+                success: true
+                data:
+                  chunkSize: 67108864
+                  maxFileSize: -1
+                  tokenExpiry: 604800
+                  chunkSizeMB: 64
+                  tokenExpiryDays: 7
+                  maxFileSizeUnlimited: true
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: CONFIG_ERROR
+                  message: Failed to retrieve configuration
 
   /api/proxy/analyze:
     post:
@@ -379,6 +434,42 @@ components:
               type: string
               description: Base32 encoded TOTP secret
               example: "JBSWY3DPEHPK3PXP"
+
+    ConfigResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            chunkSize:
+              type: integer
+              format: int64
+              description: 'Chunk size in bytes (default: 64MB = 67108864)'
+              example: 67108864
+            maxFileSize:
+              type: integer
+              format: int64
+              description: 'Maximum file size in bytes (-1 means unlimited)'
+              example: -1
+            tokenExpiry:
+              type: integer
+              description: 'Token expiration time in seconds (default: 604800 = 7 days)'
+              example: 604800
+            chunkSizeMB:
+              type: integer
+              description: Chunk size in megabytes (helper field for convenience)
+              example: 64
+            tokenExpiryDays:
+              type: integer
+              description: Token expiration time in days (helper field for convenience)
+              example: 7
+            maxFileSizeUnlimited:
+              type: boolean
+              description: Whether there is no file size limit (helper field)
+              example: true
 
     AnalyzeRequest:
       type: object
