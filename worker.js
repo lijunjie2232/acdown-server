@@ -369,6 +369,96 @@ async function serveTOTPSetupPage() {
             transform: translateY(-2px);
         }
 
+        .generate-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .secret-input-section {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .secret-input-section .section-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .input-with-button {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .input-with-button input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.3s;
+        }
+
+        .input-with-button input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-with-button button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .input-with-button button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .input-with-button button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .or-divider {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+            color: #999;
+        }
+
+        .or-divider::before,
+        .or-divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 45%;
+            height: 1px;
+            background: #e0e0e0;
+        }
+
+        .or-divider::before {
+            left: 0;
+        }
+
+        .or-divider::after {
+            right: 0;
+        }
+
         .hidden {
             display: none;
         }
@@ -379,7 +469,22 @@ async function serveTOTPSetupPage() {
         <h1>🔐 TOTP Secret Generator</h1>
         <p class="subtitle">Generate and verify TOTP secrets for Cloudflare Workers</p>
 
-        <button id="generateBtn" class="generate-btn">Generate New Secret</button>
+        <div class="secret-input-section">
+            <div class="section-title">Option 1: Use Existing Secret</div>
+            <div class="input-with-button">
+                <input 
+                    type="text" 
+                    id="existingSecret" 
+                    placeholder="Enter your existing TOTP secret (Base32)"
+                    autocomplete="off"
+                >
+                <button id="useExistingBtn" type="button">Use This Secret</button>
+            </div>
+        </div>
+
+        <div class="or-divider">OR</div>
+
+        <button id="generateBtn" class="generate-btn">✨ Generate New Secret</button>
 
         <div id="content" class="hidden">
             <div class="instructions">
@@ -432,6 +537,37 @@ async function serveTOTPSetupPage() {
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
         let currentSecret = null;
+
+        // Use existing secret
+        document.getElementById('useExistingBtn').addEventListener('click', () => {
+            const existingSecretInput = document.getElementById('existingSecret');
+            const secret = existingSecretInput.value.trim().toUpperCase();
+
+            if (!secret) {
+                alert('Please enter a TOTP secret');
+                return;
+            }
+
+            // Basic validation for Base32 format
+            const base32Regex = /^[A-Z2-7]+=*$/;
+            if (!base32Regex.test(secret)) {
+                alert('Invalid Base32 format. Secret should only contain characters A-Z and 2-7.');
+                return;
+            }
+
+            currentSecret = secret;
+            displaySecret(currentSecret);
+            
+            // Clear the input
+            existingSecretInput.value = '';
+            
+            // Show content
+            const content = document.getElementById('content');
+            content.classList.remove('hidden');
+            
+            // Scroll to content
+            content.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
 
         // Generate new secret
         document.getElementById('generateBtn').addEventListener('click', async () => {
