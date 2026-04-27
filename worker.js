@@ -1031,7 +1031,7 @@ async function serveWelcomePage() {
 
         <div class="links">
             <a href="/health" class="link">Health Check</a>
-            <a href="/api/docs" class="link">API Documentation</a>
+            <a href="https://lijunjie2232.github.io/acdown-server/" class="link">API Documentation</a>
             <a href="https://github.com" class="link" target="_blank">GitHub</a>
         </div>
 
