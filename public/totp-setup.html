@@ -242,6 +242,47 @@
         .hidden {
             display: none;
         }
+
+        .input-section {
+            margin-bottom: 20px;
+        }
+
+        .secret-input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .secret-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .secret-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .use-existing-btn {
+            padding: 12px 20px;
+            background: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .use-existing-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
@@ -250,6 +291,19 @@
         <p class="subtitle">Generate and verify TOTP secrets for Cloudflare Workers</p>
 
         <button id="generateBtn" class="generate-btn">Generate New Secret</button>
+
+        <div class="input-section">
+            <div class="section-title">Or Use Existing Secret:</div>
+            <div class="secret-input-group">
+                <input 
+                    type="text" 
+                    id="existingSecretInput" 
+                    class="secret-input"
+                    placeholder="Enter your existing TOTP secret (Base32)"
+                >
+                <button id="useExistingBtn" class="use-existing-btn">Use Existing</button>
+            </div>
+        </div>
 
         <div id="content" class="hidden">
             <div class="instructions">
@@ -331,6 +385,31 @@
             } finally {
                 generateBtn.disabled = false;
             }
+        });
+
+        // Use existing secret
+        document.getElementById('useExistingBtn').addEventListener('click', () => {
+            const existingSecretInput = document.getElementById('existingSecretInput');
+            const secret = existingSecretInput.value.trim().toUpperCase();
+            
+            if (!secret) {
+                alert('Please enter a secret');
+                return;
+            }
+            
+            // Validate base32 format
+            const base32Regex = /^[A-Z2-7]+=*$/;
+            if (!base32Regex.test(secret)) {
+                alert('Invalid Base32 format. Please check your secret.');
+                return;
+            }
+            
+            currentSecret = secret;
+            displaySecret(currentSecret);
+            
+            // Show content
+            const content = document.getElementById('content');
+            content.classList.remove('hidden');
         });
 
         // Display secret and generate QR code
