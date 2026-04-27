@@ -1,0 +1,441 @@
+openapi: 3.0.3
+info:
+  title: ACDown Server API
+  description: |
+    A secure file proxy server built on Cloudflare Workers with TOTP authentication.
+    
+    This API provides endpoints for:
+    - TOTP-based authentication
+    - File analysis and metadata retrieval
+    - Chunked file downloads with encrypted parameters
+    
+    All proxy endpoints require authentication via `x-auth-token` header.
+  version: 1.0.0
+  contact:
+    name: ACDown Server
+    url: https://github.com/lijunjie2232/acdown-server
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://your-worker.your-subdomain.workers.dev
+    description: Cloudflare Workers deployment
+  - url: http://localhost:8787
+    description: Local development with Wrangler
+
+tags:
+  - name: Authentication
+    description: TOTP-based authentication endpoints
+  - name: Proxy
+    description: File proxy and download endpoints
+
+paths:
+  /api/auth/generate-secret:
+    get:
+      tags:
+        - Authentication
+      summary: Generate TOTP Secret
+      description: |
+        Generates a new TOTP secret key in base32 format.
+        Use this secret to configure your authenticator app.
+      operationId: generateTOTPSecret
+      responses:
+        '200':
+          description: Successfully generated TOTP secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateSecretResponse'
+              example:
+                success: true
+                data:
+                  secret: JBSWY3DPEHPK3PXP
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: GENERATE_SECRET_FAILED
+                  message: Failed to generate secret
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login with TOTP Code
+      description: |
+        Authenticates using a TOTP code and returns a session token.
+        The session token should be included in subsequent requests via the `x-auth-token` header.
+      operationId: loginWithTOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              totpCode: "123456"
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                success: true
+                data:
+                  token: abc123def456...
+                  expiresAt: 1234567890000
+        '400':
+          description: Missing TOTP code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: MISSING_TOTP
+                  message: TOTP code is required
+        '401':
+          description: Invalid TOTP code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: TOTP_INVALID
+                  message: Invalid TOTP code
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: LOGIN_FAILED
+                  message: Login failed due to server error
+
+  /api/proxy/analyze:
+    post:
+      tags:
+        - Proxy
+      summary: Analyze Remote File
+      description: |
+        Analyzes a remote file URL to determine its size, range support, and generates encrypted part tokens for chunked downloads.
+        
+        Requires authentication via `x-auth-token` header.
+      operationId: analyzeFile
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+            example:
+              url: "https://example.com/largefile.zip"
+      responses:
+        '200':
+          description: Successfully analyzed file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeResponse'
+              example:
+                success: true
+                data:
+                  fileSize: 10485760
+                  totalParts: 10
+                  chunkSize: 1048576
+                  parts:
+                    - "encrypted_token_1"
+                    - "encrypted_token_2"
+        '400':
+          description: Invalid URL or unsupported configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingUrl:
+                  value:
+                    success: false
+                    error:
+                      code: MISSING_URL
+                      message: URL is required
+                invalidUrl:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_URL
+                      message: Invalid or unsupported URL
+                unknownSize:
+                  value:
+                    success: false
+                    error:
+                      code: UNKNOWN_FILE_SIZE
+                      message: Could not determine file size
+                rangeNotSupported:
+                  value:
+                    success: false
+                    error:
+                      code: RANGE_NOT_SUPPORTED
+                      message: File does not support range requests and exceeds chunk size
+        '401':
+          description: Authentication required or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                authRequired:
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication token is required
+                authInvalid:
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_INVALID
+                      message: Invalid or expired authentication token
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: FILE_TOO_LARGE
+                  message: File size (1073741824 bytes) exceeds maximum allowed size
+        '504':
+          description: Request timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: REQUEST_TIMEOUT
+                  message: Request to remote server timed out
+        '500':
+          description: Analysis failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: ANALYSIS_FAILED
+                  message: Failed to analyze file
+
+  /api/proxy/part/{encryptedParams}:
+    get:
+      tags:
+        - Proxy
+      summary: Download File Part
+      description: |
+        Downloads a specific chunk of a file using an encrypted parameter token.
+        The encrypted token is obtained from the `/api/proxy/analyze` endpoint.
+        
+        Returns the raw file content for the specified byte range.
+        
+        Requires authentication via `x-auth-token` header.
+      operationId: downloadPart
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: encryptedParams
+          in: path
+          required: true
+          description: Encrypted parameter token containing URL, start/end bytes, and part index
+          schema:
+            type: string
+          example: "eyJ1cmwiOiJodHRwczovL2V4YW1wbGUuY29tL2ZpbGUuemlwIiwic3RhcnQiOjAsImVuZCI6MTA0ODU3NSwiaW5kZXgiOjAsInRvdGFsIjoxMH0="
+      responses:
+        '200':
+          description: File part content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid or corrupted part parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPart:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_PART
+                      message: Invalid or corrupted part parameter
+                missingFields:
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_PART
+                      message: Part parameters are missing required fields
+        '401':
+          description: Authentication required or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                authRequired:
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_REQUIRED
+                      message: Authentication token is required
+                authInvalid:
+                  value:
+                    success: false
+                    error:
+                      code: AUTH_INVALID
+                      message: Invalid or expired authentication token
+        '500':
+          description: Part download failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: PART_DOWNLOAD_FAILED
+                  message: Failed to download file part
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-auth-token
+      description: Session token obtained from `/api/auth/login` endpoint
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - totpCode
+      properties:
+        totpCode:
+          type: string
+          description: 6-digit TOTP code from authenticator app
+          pattern: '^\d{6}$'
+          example: "123456"
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              description: Session token for authentication
+              example: "abc123def456..."
+            expiresAt:
+              type: integer
+              format: int64
+              description: Token expiration timestamp in milliseconds
+              example: 1234567890000
+
+    GenerateSecretResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            secret:
+              type: string
+              description: Base32 encoded TOTP secret
+              example: "JBSWY3DPEHPK3PXP"
+
+    AnalyzeRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL of the file to analyze
+          example: "https://example.com/largefile.zip"
+
+    AnalyzeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            fileSize:
+              type: integer
+              format: int64
+              description: Total file size in bytes
+              example: 10485760
+            totalParts:
+              type: integer
+              description: Total number of parts/chunks
+              example: 10
+            chunkSize:
+              type: integer
+              description: Size of each chunk in bytes
+              example: 1048576
+            parts:
+              type: array
+              description: Array of encrypted part tokens
+              items:
+                type: string
+              example:
+                - "encrypted_token_1"
+                - "encrypted_token_2"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+              example: "AUTH_REQUIRED"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Authentication token is required"
