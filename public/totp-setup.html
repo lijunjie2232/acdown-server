@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOTP Secret Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        #qrcode {
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .secret-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .secret-value {
+            flex: 1;
+            padding: 12px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .copy-btn {
+            padding: 12px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .copy-btn:active {
+            transform: translateY(0);
+        }
+
+        .copy-btn.copied {
+            background: #4caf50;
+        }
+
+        .verify-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-group label {
+            font-size: 14px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .verify-btn {
+            padding: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .verify-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .verify-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            padding: 20px;
+        }
+
+        .instructions {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .instructions h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            color: #555;
+            line-height: 1.8;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 14px;
+            background: #764ba2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .generate-btn:hover {
+            background: #653a91;
+            transform: translateY(-2px);
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 TOTP Secret Generator</h1>
+        <p class="subtitle">Generate and verify TOTP secrets for Cloudflare Workers</p>
+
+        <button id="generateBtn" class="generate-btn">Generate New Secret</button>
+
+        <div id="content" class="hidden">
+            <div class="instructions">
+                <h3>📱 Setup Instructions:</h3>
+                <ol>
+                    <li>Scan the QR code with Google Authenticator or any TOTP app</li>
+                    <li>Copy the secret and save it to Cloudflare Workers environment variable <code>TOTP_SECRET</code></li>
+                    <li>Enter the 6-digit code from your authenticator app below to verify</li>
+                </ol>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 1: Scan QR Code</div>
+                <div class="qr-container">
+                    <div id="qrcode"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 2: Copy Secret</div>
+                <div class="secret-display">
+                    <div id="secretValue" class="secret-value"></div>
+                    <button id="copyBtn" class="copy-btn">📋 Copy</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 3: Verify Code</div>
+                <form id="verifyForm" class="verify-form">
+                    <div class="input-group">
+                        <label for="totpCode">Enter 6-digit TOTP Code:</label>
+                        <input 
+                            type="text" 
+                            id="totpCode" 
+                            placeholder="123456" 
+                            maxlength="6" 
+                            pattern="[0-9]{6}"
+                            required
+                        >
+                    </div>
+                    <button type="submit" class="verify-btn">Verify Code</button>
+                </form>
+                <div id="verifyResult" class="result"></div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading hidden">Generating secret...</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+        let currentSecret = null;
+
+        // Generate new secret
+        document.getElementById('generateBtn').addEventListener('click', async () => {
+            const loading = document.getElementById('loading');
+            const content = document.getElementById('content');
+            const generateBtn = document.getElementById('generateBtn');
+
+            generateBtn.disabled = true;
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/auth/generate-secret');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentSecret = data.data.secret;
+                    displaySecret(currentSecret);
+                    loading.classList.add('hidden');
+                    content.classList.remove('hidden');
+                } else {
+                    alert('Failed to generate secret: ' + data.error.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error generating secret');
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+
+        // Display secret and generate QR code
+        function displaySecret(secret) {
+            // Display secret value
+            document.getElementById('secretValue').textContent = secret;
+
+            // Generate QR code with otpauth URI
+            const otpauthUri = `otpauth://totp/ACDown%20Server?secret=${secret}&issuer=ACDown%20Server`;
+            
+            // Clear previous QR code
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+
+            // Generate new QR code
+            new QRCode(qrContainer, {
+                text: otpauthUri,
+                width: 200,
+                height: 200,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+
+        // Copy secret to clipboard
+        document.getElementById('copyBtn').addEventListener('click', async () => {
+            const secret = document.getElementById('secretValue').textContent;
+            const copyBtn = document.getElementById('copyBtn');
+
+            try {
+                await navigator.clipboard.writeText(secret);
+                copyBtn.textContent = '✓ Copied!';
+                copyBtn.classList.add('copied');
+
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Copy';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (error) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = secret;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+
+                copyBtn.textContent = '✓ Copied!';
+                copyBtn.classList.add('copied');
+
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Copy';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            }
+        });
+
+        // Verify TOTP code
+        document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const totpCode = document.getElementById('totpCode').value;
+            const verifyBtn = e.target.querySelector('.verify-btn');
+            const resultDiv = document.getElementById('verifyResult');
+
+            if (!currentSecret) {
+                showResult('Please generate a secret first', 'error');
+                return;
+            }
+
+            if (!/^\d{6}$/.test(totpCode)) {
+                showResult('Please enter a valid 6-digit code', 'error');
+                return;
+            }
+
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Verifying...';
+
+            try {
+                // Use Web Crypto API to verify TOTP locally
+                const isValid = await verifyTOTP(totpCode, currentSecret);
+                
+                if (isValid) {
+                    showResult('✅ Verification successful! The code is valid.', 'success');
+                } else {
+                    showResult('❌ Verification failed. The code is invalid or has expired.', 'error');
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                showResult('Error during verification', 'error');
+            } finally {
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Verify Code';
+            }
+        });
+
+        // Show result message
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('verifyResult');
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+        }
+
+        // TOTP verification using Web Crypto API
+        async function verifyTOTP(token, secret) {
+            try {
+                // Decode base32 secret
+                const key = base32ToBytes(secret);
+                
+                // Get current time window
+                const epoch = Math.floor(Date.now() / 1000);
+                const timeWindow = Math.floor(epoch / 30);
+                
+                // Check current and adjacent time windows (for clock skew)
+                for (let offset = -1; offset <= 1; offset++) {
+                    const currentTime = timeWindow + offset;
+                    const expectedToken = await generateTOTP(key, currentTime);
+                    
+                    if (token === expectedToken) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            } catch (error) {
+                console.error('TOTP verification error:', error);
+                return false;
+            }
+        }
+
+        // Generate TOTP token
+        async function generateTOTP(key, timeWindow) {
+            // Convert time window to 8-byte buffer
+            const timeBuffer = new ArrayBuffer(8);
+            const view = new DataView(timeBuffer);
+            view.setBigUint64(0, BigInt(timeWindow), false); // Big-endian
+            
+            // Import key for HMAC-SHA1
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                key,
+                { name: 'HMAC', hash: 'SHA-1' },
+                false,
+                ['sign']
+            );
+            
+            // Generate HMAC
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, timeBuffer);
+            const hmac = new Uint8Array(signature);
+            
+            // Dynamic truncation
+            const offset = hmac[hmac.length - 1] & 0x0f;
+            const binary = ((hmac[offset] & 0x7f) << 24) |
+                          ((hmac[offset + 1] & 0xff) << 16) |
+                          ((hmac[offset + 2] & 0xff) << 8) |
+                          (hmac[offset + 3] & 0xff);
+            
+            // Generate 6-digit code
+            const otp = binary % 1000000;
+            return otp.toString().padStart(6, '0');
+        }
+
+        // Convert base32 string to bytes
+        function base32ToBytes(base32) {
+            const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+            const bits = base32.replace(/=+$/, '').split('').map(char => {
+                const index = base32Chars.indexOf(char.toUpperCase());
+                if (index === -1) throw new Error('Invalid base32 character');
+                return index.toString(2).padStart(5, '0');
+            }).join('');
+            
+            const bytes = [];
+            for (let i = 0; i < bits.length; i += 8) {
+                const byte = bits.substr(i, 8);
+                if (byte.length === 8) {
+                    bytes.push(parseInt(byte, 2));
+                }
+            }
+            
+            return new Uint8Array(bytes);
+        }
+    </script>
+</body>
+</html>

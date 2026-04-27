@@ -1,0 +1,29 @@
+{
+  "name": "acdown-server",
+  "version": "1.0.0",
+  "description": "A secure file proxy/download server with TOTP authentication and chunked download support",
+  "main": "worker.js",
+  "scripts": {
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:tail": "wrangler tail",
+    "test:worker": "node test-worker.js",
+    "test:totp-setup": "node test-totp-setup.js",
+    "test:welcome": "node test-welcome-page.js"
+  },
+  "keywords": [
+    "proxy",
+    "download",
+    "file-server",
+    "totp",
+    "authentication"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "otplib": "^12.0.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.83.0"
+  }
+}

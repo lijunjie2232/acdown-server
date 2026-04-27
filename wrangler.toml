@@ -1,0 +1,23 @@
+name = "acdown-server"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Assets configuration
+[assets]
+directory = "./public"
+
+# Environment variables (set these in Cloudflare Dashboard or using wrangler secret)
+# TOTP_SECRET - Your TOTP secret (Base32 encoded)
+# ENCRYPTION_KEY - Your encryption key
+# CHUNK_SIZE - Chunk size in bytes (default: 67108864 = 64MB)
+# MAX_FILE_SIZE - Maximum file size in bytes (default: -1 for unlimited)
+
+[vars]
+CHUNK_SIZE = "67108864"
+MAX_FILE_SIZE = "-1"
+TOKEN_EXPIRY = "604800"
+
+# Use wrangler secret put to set sensitive values:
+# wrangler secret put TOTP_SECRET
+# wrangler secret put ENCRYPTION_KEY
